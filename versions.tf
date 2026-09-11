@@ -1,9 +1,8 @@
 # Provider requirements for the scan_engine module.
 #
-# Only lower bounds are declared. The root module that calls this one owns the
-# exact constraints -- CNAPP's generator emits azurerm ">= 3.80, < 4.0" and
-# azuread ">= 2.47, < 4.0" -- and an upper bound here would make any future
-# root-side move unsatisfiable.
+# azurerm is pinned below 4.0: the legacy azurerm_virtual_machine (needed for
+# the inline data disk) and the storage_account_name arguments this module
+# uses are the 3.x shapes, and a generated root declares no constraint of its own.
 #
 # azuread is required because graph_roles.tf grants the scan engine's managed
 # identity Microsoft Graph app roles. It needs no provider block of its own: it
@@ -18,11 +17,15 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 3.80"
+      version = ">= 3.80, < 4.0"
     }
     azuread = {
       source  = "hashicorp/azuread"
-      version = ">= 2.47"
+      version = ">= 2.47, < 4.0"
+    }
+    lacework = {
+      source  = "lacework/lacework"
+      version = ">= 2.0"
     }
   }
 }

@@ -10,26 +10,34 @@
 # azuread is listed because graph_roles.tf grants the scan engine's managed
 # identity Microsoft Graph app roles.
 locals {
-  # Deterministic name (no random suffix): location so every resource (and the
-  # RG) shows its region, deployment_id so two deployments in the same
-  # subscription stay apart. Re-deploying the same deployment_id into the same
-  # subscription reuses these names, so Azure refuses the duplicate resource
-  # group / VM — an intentional guard against double-deploying the same profile.
-  #
-  # deployment_name is sanitized (lowercase, non-alphanumerics -> "-", trimmed)
-  # and capped at 15 chars so names stay within Azure's 64-char limits; the FULL
-  # deployment_name / deployment_id go into tags below.
-  dep_name_clean = trim(replace(lower(var.deployment_name), "/[^a-z0-9]+/", "-"), "-")
+  integration = var.global ? {
+    lacework_integration_guid = lacework_integration_azure_fortidspm.main[0].intg_guid
+    deployment_id             = lacework_integration_azure_fortidspm.main[0].deployment_id
+    deployment_name           = lacework_integration_azure_fortidspm.main[0].deployment_name
+    env_id                    = lacework_integration_azure_fortidspm.main[0].env_id
+    activation_tokens         = lacework_integration_azure_fortidspm.main[0].activation_tokens
+    image_urls                = lacework_integration_azure_fortidspm.main[0].image_urls
+    hyperv_generations        = lacework_integration_azure_fortidspm.main[0].hyperv_generations
+  } : var.global_module_reference
+
+  activation_token  = lookup(local.integration.activation_tokens, var.location, "")
+  image_url         = lookup(local.integration.image_urls, var.location, "")
+  hyperv_generation = lookup(local.integration.hyperv_generations, var.location, "V1")
+
+  dep_name_clean = trim(replace(lower(local.integration.deployment_name), "/[^a-z0-9]+/", "-"), "-")
   dep_name_short = trim(substr(local.dep_name_clean, 0, 15), "-")
-  dep_id_short   = substr(var.deployment_id, 0, 8)
+  dep_id_short   = substr(local.integration.deployment_id, 0, 8)
   name           = "${var.location}-${local.dep_name_short}-${local.dep_id_short}"
+
+  # Storage account names are 3-24 lowercase alphanumerics and globally unique.
+  image_storage_account = "fdspm${substr(md5("${data.azurerm_subscription.current.subscription_id}-${local.name}"), 0, 18)}"
 
   common_tags = merge({
     "fortidspm:role"            = "scan_engine"
     "fortidspm:managed"         = "terraform"
-    "fortidspm:deployment_name" = var.deployment_name
-    "fortidspm:deployment_id"   = var.deployment_id
-  }, var.env_id != "" ? { "fortidspm:env_id" = var.env_id } : {}, var.extra_tags)
+    "fortidspm:deployment_name" = local.integration.deployment_name
+    "fortidspm:deployment_id"   = local.integration.deployment_id
+  }, local.integration.env_id != "" ? { "fortidspm:env_id" = local.integration.env_id } : {}, var.extra_tags)
 
   create_subnet = var.subnet_id == ""
   subnet_id     = local.create_subnet ? azurerm_subnet.main[0].id : var.subnet_id
@@ -86,6 +94,22 @@ data "azurerm_user_assigned_identity" "provided" {
 # ---------------------------------------------------------------------------
 # Resource group for everything this module creates.
 # ---------------------------------------------------------------------------
+resource "lacework_integration_azure_fortidspm" "main" {
+  count = var.global ? 1 : 0
+
+  name            = var.lacework_integration_name
+  tenant_id       = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
+  subscription_id = var.tenant_level ? "" : (var.subscription_id != "" ? var.subscription_id : data.azurerm_subscription.current.subscription_id)
+  regions         = var.regions
+
+  lifecycle {
+    precondition {
+      condition     = length(var.regions) > 0
+      error_message = "regions must list every location a scan engine is deployed in when global = true."
+    }
+  }
+}
+
 resource "azurerm_resource_group" "main" {
   name     = "rg-${local.name}"
   location = var.location
@@ -95,6 +119,59 @@ resource "azurerm_resource_group" "main" {
 # User-assigned managed identity for the VM, created per region unless a
 # pre-created one is provided via user_assigned_identity_id. Created before
 # the VM so all role assignments complete before first boot (see locals).
+# The scan engine image arrives as a signed URL to a VHD page blob in
+# Fortinet's storage. Azure copies it server-side into this subscription; no
+# bytes pass through the machine running terraform. A managed image built from
+# the copy is what the VM boots from, so the image never has to be shared
+# across tenants. The URL is re-signed on every FortiDSPM call, so it is
+# ignored after the first copy.
+resource "azurerm_storage_account" "image" {
+  name                     = local.image_storage_account
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = var.image_storage_account_tier
+  account_replication_type = "LRS"
+  account_kind             = "StorageV2"
+  tags                     = local.common_tags
+}
+
+resource "azurerm_storage_container" "image" {
+  name                  = "scan-engine-image"
+  storage_account_name  = azurerm_storage_account.image.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_blob" "image" {
+  name                   = "fortidspm-scan-engine.vhd"
+  storage_account_name   = azurerm_storage_account.image.name
+  storage_container_name = azurerm_storage_container.image.name
+  type                   = "Page"
+  source_uri             = local.image_url
+
+  lifecycle {
+    ignore_changes = [source_uri]
+    precondition {
+      condition     = local.image_url != ""
+      error_message = "FortiDSPM issued no image URL for location ${var.location}; add it to the global instance's regions."
+    }
+  }
+}
+
+resource "azurerm_image" "scan_engine" {
+  name                = "img-${local.name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  hyper_v_generation  = local.hyperv_generation
+  tags                = local.common_tags
+
+  os_disk {
+    os_type  = "Linux"
+    os_state = "Generalized"
+    blob_uri = azurerm_storage_blob.image.url
+    caching  = "ReadWrite"
+  }
+}
+
 resource "azurerm_user_assigned_identity" "main" {
   count               = var.user_assigned_identity_id == "" ? 1 : 0
   name                = "id-${local.name}"
@@ -246,7 +323,7 @@ resource "azurerm_virtual_machine" "main" {
   delete_data_disks_on_termination = false
 
   storage_image_reference {
-    id = var.image_id
+    id = azurerm_image.scan_engine.id
   }
 
   storage_os_disk {
@@ -270,7 +347,7 @@ resource "azurerm_virtual_machine" "main" {
     computer_name  = "vm-${local.name}"
     admin_username = var.admin_username
     admin_password = var.admin_password
-    custom_data    = var.activation_token # raw JWT; provider base64-encodes
+    custom_data    = local.activation_token # raw JWT; provider base64-encodes
   }
 
   os_profile_linux_config {
@@ -298,6 +375,14 @@ resource "azurerm_virtual_machine" "main" {
   # this ignore) when a fresh token must be re-seeded.
   lifecycle {
     ignore_changes = [os_profile]
+    precondition {
+      condition     = var.global || var.global_module_reference.lacework_integration_guid != ""
+      error_message = "Set global = true on exactly one module instance and pass it as global_module_reference to the others."
+    }
+    precondition {
+      condition     = local.activation_token != ""
+      error_message = "FortiDSPM issued no activation token for location ${var.location}; add it to the global instance's regions."
+    }
   }
 }
 
@@ -380,5 +465,20 @@ resource "azurerm_monitor_diagnostic_setting" "blob_audit" {
   }
   enabled_log {
     category = "StorageDelete"
+  }
+}
+resource "lacework_fortidspm_deployment_status" "this" {
+  count = var.report_deployment_status ? 1 : 0
+
+  intg_guid     = local.integration.lacework_integration_guid
+  deployment_id = local.integration.deployment_id
+  status        = "succeeded"
+
+  region {
+    name                  = var.location
+    status                = "succeeded"
+    instance_id           = azurerm_virtual_machine.main.id
+    private_ip            = azurerm_network_interface.main.private_ip_address
+    identity_principal_id = local.mi_principal_id
   }
 }

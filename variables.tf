@@ -1,4 +1,80 @@
 # ---------------------------------------------------------------------------
+# FortiCNAPP integration
+#
+# One module instance per region. The instance with global = true creates the
+# lacework_integration_azure_fortidspm resource, which registers the tenant
+# (and subscription) with FortiCNAPP and receives from FortiDSPM one single-use
+# activation token and one signed URL to the scan engine image VHD per region.
+# Every instance copies its own region's VHD into a storage account in this
+# subscription, builds a managed image from it and boots the VM from that
+# image; the non-global instances read the token and URL through
+# global_module_reference.
+# ---------------------------------------------------------------------------
+variable "global" {
+  description = "Create the FortiCNAPP DSPM integration in this module instance. Exactly one instance per deployment sets this."
+  type        = bool
+  default     = false
+}
+
+variable "global_module_reference" {
+  description = "The module instance that has global = true, passed whole (module.<name>). Required when global = false."
+  type = object({
+    lacework_integration_guid = string
+    deployment_id             = string
+    deployment_name           = string
+    env_id                    = string
+    activation_tokens         = map(string)
+    image_urls                = map(string)
+    hyperv_generations        = map(string)
+  })
+  default = {
+    lacework_integration_guid = ""
+    deployment_id             = ""
+    deployment_name           = ""
+    env_id                    = ""
+    activation_tokens         = {}
+    image_urls                = {}
+    hyperv_generations        = {}
+  }
+}
+
+variable "tenant_id" {
+  description = "Azure tenant the scan engines belong to. Used only by the global instance; empty = the tenant of the current credentials."
+  type        = string
+  default     = ""
+}
+
+variable "subscription_id" {
+  description = "Azure subscription the scan engines are deployed in. Used only by the global instance; empty = the subscription of the current credentials (or a tenant-level integration when tenant_level = true)."
+  type        = string
+  default     = ""
+}
+
+variable "regions" {
+  description = "Every Azure location a scan engine is deployed in, including this one. Used only by the global instance; FortiDSPM issues one token and image URL per entry."
+  type        = list(string)
+  default     = []
+}
+
+variable "lacework_integration_name" {
+  description = "Name of the FortiCNAPP DSPM integration. Used only by the global instance."
+  type        = string
+  default     = "azure-fortidspm"
+}
+
+variable "report_deployment_status" {
+  description = "Tell FortiDSPM this location's scan engine was created, with its VM id, private IP and managed identity. Sent only after the VM exists; an apply that fails earlier reports nothing."
+  type        = bool
+  default     = true
+}
+
+variable "image_storage_account_tier" {
+  description = "Tier of the storage account that holds the copied image VHD."
+  type        = string
+  default     = "Standard"
+}
+
+# ---------------------------------------------------------------------------
 # Per-region inputs — the root passes one region_deployments entry per module
 # instance (location + one-time JWT + gallery image version).
 # ---------------------------------------------------------------------------
@@ -8,42 +84,10 @@ variable "location" {
   type        = string
 }
 
-variable "activation_token" {
-  description = "One-time JWT activation token signed by Fortinet's control_service, specific to THIS region's scan_engine. Delivered to the VM as custom_data; the appliance reads it from /var/lib/waagent/CustomData on first boot (dlpcode/system/cloud/azure_init.py) and seeds /var/log/scan_engine/scan_engine_config.json. Single-use — request a fresh token from Fortinet if the VM is rebuilt. Carries tenant_id, the WSS server URL, and the control_service URL as claims. Baked into the deployment bundle by Fortinet; you should not need to edit it."
-  type        = string
-  sensitive   = true
 
-  validation {
-    condition     = length(var.activation_token) > 20
-    error_message = "activation_token looks too short to be a valid JWT."
-  }
-}
 
-variable "image_id" {
-  description = "Full resource ID of the FortiDSPM scan_engine image VERSION in Fortinet's Compute Gallery for this region (/subscriptions/<fortinet-sub>/resourceGroups/<rg>/providers/Microsoft.Compute/galleries/<gallery>/images/<definition>/versions/<version>). Fortinet bakes the correct version per region into region_deployments. Read cross-tenant via the provider's auxiliary_tenant_ids (fortinet_tenant_id)."
-  type        = string
 
-  validation {
-    condition     = var.image_id != ""
-    error_message = "image_id must not be empty."
-  }
-}
 
-variable "deployment_name" {
-  description = "Human-readable storage-profile name this scan_engine belongs to. Baked whole into every resource's fortidspm:deployment_name tag; a sanitized, 15-char-capped form is used in resource names (replacing the old random suffix)."
-  type        = string
-}
-
-variable "deployment_id" {
-  description = "Storage-profile UUID this scan_engine belongs to. Baked whole into every resource's fortidspm:deployment_id tag; its first 8 chars go into resource names. Combined with the location, this makes names deterministic and unique per deployment, so re-deploying the same profile into the same subscription is rejected on the duplicate resource-group / VM name."
-  type        = string
-}
-
-variable "env_id" {
-  description = "control_service environment id (ENV_ID). Added as the fortidspm:env_id tag on every resource for ops searchability. Empty = tag omitted."
-  type        = string
-  default     = ""
-}
 
 # ---------------------------------------------------------------------------
 # Networking
@@ -107,7 +151,7 @@ variable "zone" {
 }
 
 variable "data_disk_size_gb" {
-  description = "Size in GiB of the data disk mounted by the appliance as /data. The appliance refuses to boot without it (drops into maintainer shell / in-memory path). Attached inline (storage_data_disk) so it is present at first boot."
+  description = "Size in GiB of the data disk the appliance mounts at /var/log (LUKS-encrypted on first boot). Attached inline (storage_data_disk) so it is present at first boot; the appliance refuses to boot without it."
   type        = number
   default     = 300
 }

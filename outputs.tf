@@ -39,11 +39,47 @@ output "nsg_id" {
 }
 
 output "image_id" {
-  description = "Gallery image version the VM was created from."
-  value       = var.image_id
+  description = "Managed image the VM was created from, built in this subscription from the FortiDSPM VHD."
+  value       = azurerm_image.scan_engine.id
 }
 
 output "log_analytics_workspace_id" {
   description = "Workspace (customer) ID for blob audit logs. Register this with the connector so it queries StorageBlobLogs here."
   value       = azurerm_log_analytics_workspace.audit.workspace_id
+}
+output "lacework_integration_guid" {
+  description = "GUID of the FortiCNAPP DSPM integration this scan engine belongs to."
+  value       = local.integration.lacework_integration_guid
+}
+
+output "deployment_id" {
+  description = "FortiDSPM deployment id."
+  value       = local.integration.deployment_id
+}
+
+output "deployment_name" {
+  description = "FortiDSPM deployment name."
+  value       = local.integration.deployment_name
+}
+
+output "env_id" {
+  description = "FortiDSPM environment id."
+  value       = local.integration.env_id
+}
+
+output "activation_tokens" {
+  description = "Single-use activation token per location, as issued by FortiDSPM. Read by the non-global module instances."
+  value       = local.integration.activation_tokens
+  sensitive   = true
+}
+
+output "image_urls" {
+  description = "Signed scan engine image VHD URL per location, as issued by FortiDSPM."
+  value       = local.integration.image_urls
+  sensitive   = true
+}
+
+output "hyperv_generations" {
+  description = "Hyper-V generation of the scan engine image per location."
+  value       = local.integration.hyperv_generations
 }

@@ -14,6 +14,8 @@ storage account and FortiCNAPP read them back.
 
 | Resource | Purpose |
 |---|---|
+| `lacework_integration_azure_fortidspm` (global instance only) | Registers the tenant with FortiCNAPP; FortiDSPM issues the per-location activation tokens and image URLs |
+| `azurerm_storage_account`, `azurerm_storage_container`, `azurerm_storage_blob`, `azurerm_image` | Server-side copy of the scan engine image VHD into this subscription and the managed image the VM boots from |
 | `azurerm_resource_group`, `azurerm_virtual_network`, `azurerm_subnet` | Isolated network |
 | `azurerm_network_security_group` | Egress only; nothing is allowed in |
 | `azurerm_user_assigned_identity` + role assignments | Read access the scanner needs |
@@ -23,69 +25,87 @@ storage account and FortiCNAPP read them back.
 
 ## Usage
 
-The module takes the location from the provider passed to it and **declares no
-provider of its own**. Instantiate it once per location with an aliased
-provider, and one `terraform apply` covers every location in a single state.
+One module instance per location. Exactly one instance sets `global = true`:
+it creates the `lacework_integration_azure_fortidspm` resource, which
+registers the tenant and subscription with FortiCNAPP and receives from
+FortiDSPM one single-use activation token and one signed URL to the scan
+engine image VHD per location. Every instance copies its own location's VHD
+into a storage account in this subscription (server-side, no bytes through the
+machine running terraform), builds a managed image from it and boots the VM
+from that image. The non-global instances take the global one as
+`global_module_reference`. One `terraform apply` covers every location.
 
 ```hcl
 terraform {
   required_providers {
-    azurerm = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
-    azuread = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
+    azurerm  = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
+    azuread  = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
+    lacework = { source = "lacework/lacework", version = "~> 2.0" }
   }
 }
 
 provider "azurerm" {
-  alias = "westus2"
   features {}
+  subscription_id = "11111111-1111-1111-1111-111111111111" # ARM_* credentials from the environment
 }
 
-module "scan_engine_westus2" {
-  source = "github.com/lacework/terraform-azure-fortidspm?ref=v0.1.0"
+provider "azuread" {}
+provider "lacework" {} # LW_ACCOUNT / LW_API_KEY / LW_API_SECRET from the environment
 
-  providers = { azurerm = azurerm.westus2 }
+module "lacework_azure_fortidspm_westus2" {
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.2.0"
 
-  activation_token = var.activation_token_westus2  # from FortiDSPM, per location
-  image_id         = var.image_id_westus2          # from FortiDSPM, per location
-  location         = "westus2"
+  global                    = true
+  lacework_integration_name = "azure-dspm-production"
+  tenant_id                 = "00000000-0000-0000-0000-000000000000"
+  subscription_id           = "11111111-1111-1111-1111-111111111111"
+  regions                   = ["westus2", "eastus"]
+  location                  = "westus2"
+}
 
-  deployment_id   = "d-1a2b3c4d"
-  deployment_name = "azure-dspm-00000000-0000-0000-0000-000000000000"
+module "lacework_azure_fortidspm_eastus" {
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.2.0"
+
+  global_module_reference = module.lacework_azure_fortidspm_westus2
+  location                = "eastus"
 }
 ```
 
-`activation_token` and `image_id` are **per location** and are issued by
-FortiDSPM when the deployment is created.
-
-`azuread` needs no provider block: it reads the `ARM_*` environment variables
-the caller already exports.
+The activation token is single-use. Rebuilding a VM needs a new token, which
+means a new integration: taint the module's
+`lacework_integration_azure_fortidspm` resource and apply again. The image URL
+is signed for a limited time and is re-signed on every FortiDSPM call, so the
+copied blob ignores later changes to it.
 
 ## Inputs
 
-Required:
-
 | Name | Description |
 |---|---|
-| `activation_token` | One-time JWT signed by FortiDSPM's control service, **specific to this location**. Delivered to the appliance through custom data and consumed on first boot. |
-| `image_id` | Appliance image for this location. |
-| `location` | The Azure location this VM deploys into. |
-| `deployment_id` | Identifies the deployment. Takes part in resource naming. |
-| `deployment_name` | Human-readable name, applied as a tag. |
+| `location` | Azure location this instance deploys into. |
+| `global` | Create the FortiCNAPP DSPM integration in this instance. Exactly one instance per deployment. Default `false`. |
+| `global_module_reference` | The instance with `global = true`, passed whole (`module.<name>`). Required when `global = false`. |
+| `regions` | Every location a scan engine is deployed in, including this one. Global instance only. |
+| `lacework_integration_name` | Name of the FortiCNAPP DSPM integration. Global instance only. Default `azure-fortidspm`. |
+| `tenant_id` | Azure tenant the scan engines belong to. Empty = tenant of the current credentials. Global instance only. |
+| `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials, or a tenant-level integration when `tenant_level = true`. Global instance only. |
 
-Optional, with defaults: `admin_password`, `env_id`, `subnet_id`, `vnet_address_space`,
+Optional, with defaults: `report_deployment_status` (tell FortiDSPM the
+location's scan engine is up, default `true`), `subnet_id`, `vnet_address_space`,
 `subnet_address_prefixes`, `office_ip`, `enable_public_ip`, `vm_size`, `zone`,
-`data_disk_size_gb`, `admin_username`, `tenant_level`,
+`data_disk_size_gb`, `admin_username`, `admin_password`, `tenant_level`,
 `enable_monitor_audit_logs`, `rbac_scope_id`, `user_assigned_identity_id`,
 `extra_tags`, `monitored_storage_account_ids`, `log_analytics_retention_days`,
-`enable_graph_permissions`.
-
-See `variables.tf` for the full descriptions and defaults.
+`enable_graph_permissions`, `image_storage_account_tier`.
 
 ## Outputs
 
-`vm_id`, `resource_group_name`, `private_ip`, `public_ip`,
+Per instance: `vm_id`, `resource_group_name`, `private_ip`, `public_ip`,
 `identity_principal_id`, `identity_client_id`, `identity_id`, `nsg_id`,
-`image_id`, `log_analytics_workspace_id`.
+`image_id` (the managed image built here), `log_analytics_workspace_id`.
+
+Shared, read by the non-global instances through `global_module_reference`:
+`lacework_integration_guid`, `deployment_id`, `deployment_name`, `env_id`,
+`activation_tokens` (sensitive), `image_urls` (sensitive), `hyperv_generations`.
 
 ## Notes
 

@@ -25,7 +25,7 @@ terraform {
     }
     lacework = {
       source  = "lacework/lacework"
-      version = ">= 2.0"
+      version = ">= 2.6.0" # lacework_integration_*_fortidspm and lacework_fortidspm_deployment_status first shipped in 2.6.0
     }
   }
 }

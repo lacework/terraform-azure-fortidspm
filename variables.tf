@@ -151,9 +151,9 @@ variable "zone" {
 }
 
 variable "data_disk_size_gb" {
-  description = "Size in GiB of the data disk the appliance mounts at /var/log (LUKS-encrypted on first boot). Attached inline (storage_data_disk) so it is present at first boot; the appliance refuses to boot without it."
+  description = "Size in GiB of the data disk the appliance mounts at /var/log (LUKS-encrypted on first boot). Attached inline (storage_data_disk) so it is present at first boot; the appliance refuses to boot without it. Default 512 GiB, sized for production where logs accumulate."
   type        = number
-  default     = 300
+  default     = 512
 }
 
 variable "admin_username" {

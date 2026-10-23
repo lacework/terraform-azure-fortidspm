@@ -83,6 +83,39 @@ locals {
 data "azurerm_subscription" "current" {}
 data "azurerm_client_config" "current" {}
 
+# The VM sizes this subscription may use in var.location (and var.zone, when
+# pinned). Azure restricts sizes per subscription: some get no D-series at all
+# in northeurope while others do. Read at plan time, so a location with no
+# usable size fails before anything is created.
+data "azapi_resource_list" "vm_skus" {
+  type      = "Microsoft.Compute/skus@2021-07-01"
+  parent_id = data.azurerm_subscription.current.id
+  query_parameters = {
+    "$filter" = ["location eq '${lower(replace(var.location, " ", ""))}'"]
+  }
+  # length(...) == `0`, not !(...): azapi's JMESPath does not treat an empty
+  # array as false, so the negation would drop every size.
+  response_export_values = {
+    usable = format("value[?resourceType == 'virtualMachines' && length(restrictions[?type == 'Location']) == `0`%s].name",
+      var.zone != "" ? " && length(restrictions[?type == 'Zone' && contains(restrictionInfo.zones, '${var.zone}')]) == `0`" : ""
+    )
+  }
+
+  lifecycle {
+    postcondition {
+      condition     = anytrue([for s in local.vm_size_candidates : contains(self.output.usable, s)])
+      error_message = "No scan engine VM size is available in ${var.location}: ${join(", ", local.vm_size_candidates)} are not offered or are restricted for subscription ${data.azurerm_subscription.current.subscription_id}. Request access to them through an Azure support request, or deselect this region."
+    }
+  }
+}
+
+locals {
+  # Every candidate is 8 vCPU / 32 GiB and boots a Gen1 image, in the order
+  # they are tried; the image defaults to V1 (local.hyperv_generation), so no v6.
+  vm_size_candidates = var.vm_size != "" ? [var.vm_size] : ["Standard_D8s_v5", "Standard_D8s_v4", "Standard_D8s_v3", "Standard_D8as_v5"]
+  vm_size            = [for s in local.vm_size_candidates : s if contains(data.azapi_resource_list.vm_skus.output.usable, s)][0]
+}
+
 # Read the pre-created user-assigned MI (only when one is provided) to get its
 # principal_id for the role assignments. Assumed to be in the deployment subscription.
 data "azurerm_user_assigned_identity" "provided" {
@@ -316,7 +349,7 @@ resource "azurerm_virtual_machine" "main" {
   name                             = "vm-${local.name}"
   resource_group_name              = azurerm_resource_group.main.name
   location                         = azurerm_resource_group.main.location
-  vm_size                          = var.vm_size
+  vm_size                          = local.vm_size
   zones                            = var.zone != "" ? [var.zone] : null
   network_interface_ids            = [azurerm_network_interface.main.id]
   delete_os_disk_on_termination    = true

@@ -134,12 +134,12 @@ variable "enable_public_ip" {
 # ---------------------------------------------------------------------------
 
 variable "vm_size" {
-  description = "Azure VM size for scan_engine. Recommended at least Standard_D8s_v5 for production scanning; Standard_D4s_v3 is enough for activation smoke tests. ARM sizes (Dps_v5, Epds_v5) do not boot the x86 FortiDSPM image."
+  description = "Azure VM size for scan_engine. Empty (default) = the first of Standard_D8s_v5, Standard_D8s_v4, Standard_D8s_v3, Standard_D8as_v5 (8 vCPU, 32 GiB, the production minimum) that the subscription may use in this location. Standard_D4s_v3 is enough for activation smoke tests. ARM sizes (Dps_v5, Epds_v5) do not boot the x86 FortiDSPM image."
   type        = string
-  default     = "Standard_D4s_v3"
+  default     = ""
 
   validation {
-    condition     = can(regex("^Standard_[A-Za-z0-9_]+$", var.vm_size)) && !can(regex("[DdEeFf]p", var.vm_size))
+    condition     = var.vm_size == "" || can(regex("^Standard_[A-Za-z0-9_]+$", var.vm_size)) && !can(regex("[DdEeFf]p", var.vm_size))
     error_message = "vm_size must be a valid Azure VM size (e.g. Standard_D4s_v3, Standard_D8s_v5, Standard_NC4as_T4_v3). ARM-based sizes (Dps_*, Epds_*, Eps_*) do not boot the x86 FortiDSPM image."
   }
 }

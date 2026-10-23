@@ -40,6 +40,7 @@ terraform {
   required_providers {
     azurerm  = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
     azuread  = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
+    azapi    = { source = "Azure/azapi", version = ">= 2.0, < 3.0" }
     lacework = { source = "lacework/lacework", version = "~> 2.0" }
   }
 }
@@ -114,6 +115,15 @@ location (so every resource shows its region) with `deployment_id` (which keeps
 separate deployments apart). Re-deploying the same `deployment_id` into the same
 subscription therefore fails on the duplicate resource group, which is a
 deliberate guard against deploying the same profile twice.
+
+**The VM size is picked at plan time.** With `vm_size` empty, the module takes
+the first of `Standard_D8s_v5`, `Standard_D8s_v4`, `Standard_D8s_v3`,
+`Standard_D8as_v5` that the subscription may use in the location (and in `zone`,
+when set), read from the Microsoft.Compute SKUs API through `azapi`. Azure
+restricts sizes per subscription, so the same location can work for one
+subscription and not another. A location where none is usable fails the plan
+before anything is created; the subscription owner can request access to the
+size through an Azure support request.
 
 **`activation_token` is single-use.** The appliance exchanges it for long-lived
 credentials the first time it boots. If the VM is ever rebuilt, ask FortiDSPM

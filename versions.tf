@@ -9,6 +9,9 @@
 # picks up credentials from the ARM_* environment variables the caller already
 # exports.
 #
+# azapi lists the VM sizes the subscription may use (main.tf vm_skus); azurerm
+# has no data source for that. Same as azuread: no provider block, ARM_* env.
+#
 # No `provider` block: the location comes from the provider the root passes in.
 
 terraform {
@@ -22,6 +25,10 @@ terraform {
     azuread = {
       source  = "hashicorp/azuread"
       version = ">= 2.47, < 4.0"
+    }
+    azapi = {
+      source  = "Azure/azapi"
+      version = ">= 2.0, < 3.0" # JMESPath in response_export_values
     }
     lacework = {
       source  = "lacework/lacework"

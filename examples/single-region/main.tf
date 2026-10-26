@@ -2,6 +2,7 @@ terraform {
   required_providers {
     azurerm  = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
     azuread  = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
+    azapi    = { source = "Azure/azapi", version = ">= 2.0, < 3.0" }
     lacework = { source = "lacework/lacework", version = ">= 2.6.0" }
   }
 }

@@ -19,7 +19,7 @@ provider "lacework" {}
 
 # tenant_id / subscription_id default to the ones the azurerm credentials belong to.
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.1"
 
   global                    = true
   lacework_integration_name = "azure-dspm-westus2"

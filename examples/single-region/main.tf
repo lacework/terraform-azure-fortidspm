@@ -3,7 +3,7 @@ terraform {
     azurerm  = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
     azuread  = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
     azapi    = { source = "Azure/azapi", version = ">= 2.0, < 3.0" }
-    lacework = { source = "lacework/lacework", version = ">= 2.6.0" }
+    lacework = { source = "lacework/lacework", version = ">= 2.8.0" }
   }
 }
 
@@ -19,7 +19,7 @@ provider "lacework" {}
 
 # tenant_id / subscription_id default to the ones the azurerm credentials belong to.
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global                    = true
   lacework_integration_name = "azure-dspm-westus2"

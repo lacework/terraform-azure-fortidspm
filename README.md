@@ -54,7 +54,7 @@ provider "azuread" {}
 provider "lacework" {} # LW_ACCOUNT / LW_API_KEY / LW_API_SECRET from the environment
 
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global                    = true
   lacework_integration_name = "azure-dspm-production"
@@ -65,7 +65,7 @@ module "lacework_azure_fortidspm_westus2" {
 }
 
 module "lacework_azure_fortidspm_eastus" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global_module_reference = module.lacework_azure_fortidspm_westus2
   location                = "eastus"

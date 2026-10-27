@@ -88,7 +88,7 @@ copied blob ignores later changes to it.
 | `regions` | Every location a scan engine is deployed in, including this one. Global instance only. |
 | `lacework_integration_name` | Name of the FortiCNAPP DSPM integration. Global instance only. Default `azure-fortidspm`. |
 | `tenant_id` | Azure tenant the scan engines belong to. Empty = tenant of the current credentials. Global instance only. |
-| `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials, or a tenant-level integration when `tenant_level = true`. Global instance only. |
+| `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials. Global instance only. |
 
 Optional, with defaults: `report_deployment_status` (tell FortiDSPM the
 location's scan engine is up, default `true`), `subnet_id`, `vnet_address_space`,

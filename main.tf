@@ -132,8 +132,9 @@ resource "lacework_integration_azure_fortidspm" "main" {
 
   name            = var.lacework_integration_name
   tenant_id       = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
-  subscription_id = var.tenant_level ? "" : (var.subscription_id != "" ? var.subscription_id : data.azurerm_subscription.current.subscription_id)
+  subscription_id = var.subscription_id != "" ? var.subscription_id : data.azurerm_subscription.current.subscription_id
   regions         = var.regions
+  tenant_level    = var.tenant_level
 
   lifecycle {
     precondition {

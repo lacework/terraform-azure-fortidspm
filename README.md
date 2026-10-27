@@ -54,7 +54,7 @@ provider "azuread" {}
 provider "lacework" {} # LW_ACCOUNT / LW_API_KEY / LW_API_SECRET from the environment
 
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global                    = true
   lacework_integration_name = "azure-dspm-production"
@@ -65,7 +65,7 @@ module "lacework_azure_fortidspm_westus2" {
 }
 
 module "lacework_azure_fortidspm_eastus" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global_module_reference = module.lacework_azure_fortidspm_westus2
   location                = "eastus"
@@ -88,7 +88,7 @@ copied blob ignores later changes to it.
 | `regions` | Every location a scan engine is deployed in, including this one. Global instance only. |
 | `lacework_integration_name` | Name of the FortiCNAPP DSPM integration. Global instance only. Default `azure-fortidspm`. |
 | `tenant_id` | Azure tenant the scan engines belong to. Empty = tenant of the current credentials. Global instance only. |
-| `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials, or a tenant-level integration when `tenant_level = true`. Global instance only. |
+| `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials. Global instance only. |
 
 Optional, with defaults: `report_deployment_status` (tell FortiDSPM the
 location's scan engine is up, default `true`), `subnet_id`, `vnet_address_space`,

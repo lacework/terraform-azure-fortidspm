@@ -3,7 +3,7 @@ terraform {
     azurerm  = { source = "hashicorp/azurerm", version = ">= 3.80, < 4.0" }
     azuread  = { source = "hashicorp/azuread", version = ">= 2.47, < 4.0" }
     azapi    = { source = "Azure/azapi", version = ">= 2.0, < 3.0" }
-    lacework = { source = "lacework/lacework", version = ">= 2.6.0" }
+    lacework = { source = "lacework/lacework", version = ">= 2.8.0" }
   }
 }
 
@@ -22,7 +22,7 @@ provider "lacework" {}
 # listing every location, and receives one activation token and one image URL per
 # location. Each instance copies its own location's VHD and builds its own image.
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global                    = true
   lacework_integration_name = "azure-dspm-multi-region"
@@ -32,7 +32,7 @@ module "lacework_azure_fortidspm_westus2" {
 
 # Every other location reads its token and image URL from the global instance.
 module "lacework_azure_fortidspm_eastus" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.3.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
 
   global_module_reference = module.lacework_azure_fortidspm_westus2
   location                = "eastus"

@@ -45,7 +45,7 @@ variable "tenant_id" {
 }
 
 variable "subscription_id" {
-  description = "Azure subscription the scan engines are deployed in. Used only by the global instance; empty = the subscription of the current credentials (or a tenant-level integration when tenant_level = true)."
+  description = "Azure subscription the scan engines are deployed in. Used only by the global instance; empty = the subscription of the current credentials."
   type        = string
   default     = ""
 }

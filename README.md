@@ -54,7 +54,7 @@ provider "azuread" {}
 provider "lacework" {} # LW_ACCOUNT / LW_API_KEY / LW_API_SECRET from the environment
 
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.1"
 
   global                    = true
   lacework_integration_name = "azure-dspm-production"
@@ -65,7 +65,7 @@ module "lacework_azure_fortidspm_westus2" {
 }
 
 module "lacework_azure_fortidspm_eastus" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.0"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.1"
 
   global_module_reference = module.lacework_azure_fortidspm_westus2
   location                = "eastus"
@@ -124,6 +124,15 @@ restricts sizes per subscription, so the same location can work for one
 subscription and not another. A location where none is usable fails the plan
 before anything is created; the subscription owner can request access to the
 size through an Azure support request.
+
+Among the usable sizes, the first one with 8 vCPUs of quota left in its family
+and in the regional total wins (Microsoft.Compute usages API). Subscriptions
+often have no quota for the newest families, so this is commonly
+`Standard_D8s_v4` or `Standard_D8s_v3` rather than `Standard_D8s_v5`. Quota only
+orders the choice: when no usable size has quota left, the first usable one is
+used and Azure rejects it at apply with the quota to raise. The VM ignores later
+changes to `vm_size`, so a re-plan or a module upgrade never resizes a running
+scan engine; to change its size, taint or replace the VM.
 
 **`activation_token` is single-use.** The appliance exchanges it for long-lived
 credentials the first time it boots. If the VM is ever rebuilt, ask FortiDSPM

@@ -99,6 +99,8 @@ data "azapi_resource_list" "vm_skus" {
     usable = format("value[?resourceType == 'virtualMachines' && length(restrictions[?type == 'Location']) == `0`%s].name",
       var.zone != "" ? " && length(restrictions[?type == 'Zone' && contains(restrictionInfo.zones, '${var.zone}')]) == `0`" : ""
     )
+    # Quota family and vCPU count of the candidates, for vm_usages below.
+    candidates = "value[?resourceType == 'virtualMachines' && contains(`${jsonencode(local.vm_size_candidates)}`, name)].{name: name, family: family, vcpus: capabilities[?name == 'vCPUs'].value | [0]}"
   }
 
   lifecycle {
@@ -109,11 +111,41 @@ data "azapi_resource_list" "vm_skus" {
   }
 }
 
+# vCPU quota per family, and the regional total ("cores"), in var.location. A
+# size that is not restricted can still have no quota left: subscriptions often
+# get 0 for the newest families, and Azure only says so when the VM is created.
+data "azapi_resource_list" "vm_usages" {
+  type      = "Microsoft.Compute/locations/usages@2023-07-01"
+  parent_id = "${data.azurerm_subscription.current.id}/providers/Microsoft.Compute/locations/${lower(replace(var.location, " ", ""))}"
+  response_export_values = {
+    usages = "value[].{name: name.value, current: currentValue, limit: limit}"
+  }
+}
+
 locals {
   # Every candidate is 8 vCPU / 32 GiB and boots a Gen1 image, in the order
   # they are tried; the image defaults to V1 (local.hyperv_generation), so no v6.
   vm_size_candidates = var.vm_size != "" ? [var.vm_size] : ["Standard_D8s_v5", "Standard_D8s_v4", "Standard_D8s_v3", "Standard_D8as_v5"]
-  vm_size            = [for s in local.vm_size_candidates : s if contains(data.azapi_resource_list.vm_skus.output.usable, s)][0]
+  usable_vm_sizes    = [for s in local.vm_size_candidates : s if contains(data.azapi_resource_list.vm_skus.output.usable, s)]
+
+  vcpu_quota_left = { for u in data.azapi_resource_list.vm_usages.output.usages : u.name => u.limit - u.current... }
+  candidate_skus  = { for s in data.azapi_resource_list.vm_skus.output.candidates : s.name => s }
+  # Usable sizes with enough vCPU quota left in their family and in the regional
+  # total. A family or vCPU count the APIs do not report is not held against.
+  vm_sizes_with_quota = [
+    for s in local.usable_vm_sizes : s
+    if alltrue([
+      for q in [try(local.candidate_skus[s].family, ""), "cores"] :
+      try(min(local.vcpu_quota_left[q]...), 1e9) >= try(tonumber(local.candidate_skus[s].vcpus), 0)
+    ])
+  ]
+  # Quota only orders the choice, it never fails the plan: this module cannot
+  # tell at plan time whether its own VM already exists (the name comes from the
+  # FortiDSPM integration), and that VM's vCPUs count as used. When no usable
+  # size has quota left, the first usable one goes to Azure, which rejects it
+  # with the quota to raise. The VM ignores later vm_size changes, so a re-plan
+  # never resizes it.
+  vm_size = concat(local.vm_sizes_with_quota, local.usable_vm_sizes)[0]
 }
 
 # Read the pre-created user-assigned MI (only when one is provided) to get its
@@ -407,8 +439,11 @@ resource "azurerm_virtual_machine" "main" {
   # clean. NOTE: rotating activation_token therefore won't auto-replace the VM
   # — `terraform taint azurerm_virtual_machine.main` (or temporarily remove
   # this ignore) when a fresh token must be re-seeded.
+  # vm_size is picked again on every plan from restrictions and quota, and this
+  # VM's own vCPUs count against that quota; ignore it so a re-plan or a module
+  # upgrade never resizes a running scan engine.
   lifecycle {
-    ignore_changes = [os_profile]
+    ignore_changes = [os_profile, vm_size]
     precondition {
       condition     = var.global || var.global_module_reference.lacework_integration_guid != ""
       error_message = "Set global = true on exactly one module instance and pass it as global_module_reference to the others."

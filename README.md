@@ -21,7 +21,7 @@ storage account and FortiCNAPP read them back.
 | `azurerm_user_assigned_identity` + role assignments | Read access the scanner needs |
 | `azuread_app_role_assignment` (`graph_roles.tf`) | Microsoft Graph app roles for the identity |
 | Tenant-wide grants (`tenant_grants.tf`) | Optional, for tenant-level deployments |
-| `azurerm_linux_virtual_machine` | The scan engine appliance itself |
+| `azurerm_virtual_machine` | The scan engine appliance itself |
 
 ## Usage
 
@@ -144,7 +144,7 @@ resource ignores changes to it to keep plans clean. When a fresh token has to be
 seeded, taint the VM:
 
 ```
-terraform taint 'module.scan_engine_westus2.azurerm_virtual_machine.main'
+terraform taint 'module.lacework_azure_fortidspm_westus2.azurerm_virtual_machine.main'
 ```
 
 **`admin_password` exists only because Azure demands one.** The appliance takes

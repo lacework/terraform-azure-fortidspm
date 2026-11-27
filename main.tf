@@ -20,14 +20,14 @@ locals {
     hyperv_generations        = lacework_integration_azure_fortidspm.main[0].hyperv_generations
   } : var.global_module_reference
 
-  activation_token  = lookup(local.integration.activation_tokens, var.location, "")
-  image_url         = lookup(local.integration.image_urls, var.location, "")
-  hyperv_generation = lookup(local.integration.hyperv_generations, var.location, "V1")
+  activation_token  = lookup(local.integration.activation_tokens, local.location, "")
+  image_url         = lookup(local.integration.image_urls, local.location, "")
+  hyperv_generation = lookup(local.integration.hyperv_generations, local.location, "V1")
 
   dep_name_clean = trim(replace(lower(local.integration.deployment_name), "/[^a-z0-9]+/", "-"), "-")
   dep_name_short = trim(substr(local.dep_name_clean, 0, 15), "-")
   dep_id_short   = substr(local.integration.deployment_id, 0, 8)
-  name           = "${var.location}-${local.dep_name_short}-${local.dep_id_short}"
+  name           = "${local.location}-${local.dep_name_short}-${local.dep_id_short}"
 
   # Storage account names are 3-24 lowercase alphanumerics and globally unique.
   image_storage_account = "fdspm${substr(md5("${data.azurerm_subscription.current.subscription_id}-${local.name}"), 0, 18)}"
@@ -106,7 +106,7 @@ data "azapi_resource_list" "vm_skus" {
   lifecycle {
     postcondition {
       condition     = anytrue([for s in local.vm_size_candidates : contains(self.output.usable, s)])
-      error_message = "No scan engine VM size is available in ${var.location}: ${join(", ", local.vm_size_candidates)} are not offered or are restricted for subscription ${data.azurerm_subscription.current.subscription_id}. Request access to them through an Azure support request, or deselect this region."
+      error_message = "No scan engine VM size is available in ${local.location}: ${join(", ", local.vm_size_candidates)} are not offered or are restricted for subscription ${data.azurerm_subscription.current.subscription_id}. Request access to them through an Azure support request, or deselect this region."
     }
   }
 }
@@ -165,12 +165,12 @@ resource "lacework_integration_azure_fortidspm" "main" {
   name            = var.lacework_integration_name
   tenant_id       = var.tenant_id != "" ? var.tenant_id : data.azurerm_client_config.current.tenant_id
   subscription_id = var.subscription_id != "" ? var.subscription_id : data.azurerm_subscription.current.subscription_id
-  regions         = var.regions
+  regions         = local.regions
   tenant_level    = var.tenant_level
 
   lifecycle {
     precondition {
-      condition     = length(var.regions) > 0
+      condition     = length(local.regions) > 0
       error_message = "regions must list every location a scan engine is deployed in when global = true."
     }
   }
@@ -178,7 +178,7 @@ resource "lacework_integration_azure_fortidspm" "main" {
 
 resource "azurerm_resource_group" "main" {
   name     = "rg-${local.name}"
-  location = var.location
+  location = local.location
   tags     = local.common_tags
 }
 
@@ -218,7 +218,7 @@ resource "azurerm_storage_blob" "image" {
     ignore_changes = [source_uri]
     precondition {
       condition     = local.image_url != ""
-      error_message = "FortiDSPM issued no image URL for location ${var.location}; add it to the global instance's regions."
+      error_message = "FortiDSPM issued no image URL for location ${local.location}; add it to the global instance's regions."
     }
   }
 }
@@ -450,7 +450,7 @@ resource "azurerm_virtual_machine" "main" {
     }
     precondition {
       condition     = local.activation_token != ""
-      error_message = "FortiDSPM issued no activation token for location ${var.location}; add it to the global instance's regions."
+      error_message = "FortiDSPM issued no activation token for location ${local.location}; add it to the global instance's regions."
     }
   }
 }
@@ -544,10 +544,18 @@ resource "lacework_fortidspm_deployment_status" "this" {
   status        = "succeeded"
 
   region {
-    name                  = var.location
+    name                  = local.location
     status                = "succeeded"
     instance_id           = azurerm_virtual_machine.main.id
     private_ip            = azurerm_network_interface.main.private_ip_address
     identity_principal_id = local.mi_principal_id
   }
+}
+
+# location and regions accept the Azure display name ("Central US") or the code
+# (centralus). FortiDSPM, the activation token / image URL keys and resource names
+# all use the code.
+locals {
+  location = lower(replace(var.location, " ", ""))
+  regions  = [for r in var.regions : lower(replace(r, " ", ""))]
 }

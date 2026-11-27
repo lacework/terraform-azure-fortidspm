@@ -51,9 +51,14 @@ variable "subscription_id" {
 }
 
 variable "regions" {
-  description = "Every Azure location a scan engine is deployed in, including this one. Used only by the global instance; FortiDSPM issues one token and image URL per entry."
+  description = "Every Azure location a scan engine is deployed in, including this one, as a code (centralus) or display name (\"Central US\"). Used only by the global instance; FortiDSPM issues one token and image URL per entry."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = alltrue([for r in var.regions : can(regex("^[a-z0-9]+$", lower(replace(r, " ", ""))))])
+    error_message = "Each regions entry must be an Azure location code (e.g. centralus) or its display name (e.g. \"Central US\")."
+  }
 }
 
 variable "lacework_integration_name" {
@@ -80,8 +85,13 @@ variable "image_storage_account_tier" {
 # ---------------------------------------------------------------------------
 
 variable "location" {
-  description = "Azure region this module instance deploys into (e.g. eastus). Comes from the region_deployments entry; also baked into every resource name so the resource group shows its region."
+  description = "Azure region this module instance deploys into, as a code (e.g. eastus) or display name (e.g. \"East US\"). Comes from the region_deployments entry; its code is also baked into every resource name so the resource group shows its region."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", lower(replace(var.location, " ", ""))))
+    error_message = "location must be an Azure location code (e.g. eastus) or its display name (e.g. \"East US\")."
+  }
 }
 
 

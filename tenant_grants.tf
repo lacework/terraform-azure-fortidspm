@@ -83,7 +83,7 @@ resource "azurerm_policy_definition" "tenant_grants" {
           { field = "Microsoft.Authorization/roleAssignments/principalId", equals = "[parameters('principalId')]" },
         ] }
         deployment = {
-          location = var.location
+          location = local.location
           properties = {
             mode       = "incremental"
             parameters = { principalId = { value = "[parameters('principalId')]" } }
@@ -117,7 +117,7 @@ resource "azurerm_management_group_policy_assignment" "tenant_grants" {
   display_name         = "FortiDSPM scan_engine tenant grants (${local.name})"
   management_group_id  = local.tenant_mg_id
   policy_definition_id = azurerm_policy_definition.tenant_grants[0].id
-  location             = var.location
+  location             = local.location
 
   identity {
     type = "SystemAssigned"

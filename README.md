@@ -54,7 +54,7 @@ provider "azuread" {}
 provider "lacework" {} # LW_ACCOUNT / LW_API_KEY / LW_API_SECRET from the environment
 
 module "lacework_azure_fortidspm_westus2" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.1"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.2"
 
   global                    = true
   lacework_integration_name = "azure-dspm-production"
@@ -65,7 +65,7 @@ module "lacework_azure_fortidspm_westus2" {
 }
 
 module "lacework_azure_fortidspm_eastus" {
-  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.1"
+  source = "git::https://github.com/lacework/terraform-azure-fortidspm.git?ref=v0.5.2"
 
   global_module_reference = module.lacework_azure_fortidspm_westus2
   location                = "eastus"
@@ -82,10 +82,10 @@ copied blob ignores later changes to it.
 
 | Name | Description |
 |---|---|
-| `location` | Azure location this instance deploys into. |
+| `location` | Azure location this instance deploys into, as a code (`centralus`) or display name (`"Central US"`). |
 | `global` | Create the FortiCNAPP DSPM integration in this instance. Exactly one instance per deployment. Default `false`. |
 | `global_module_reference` | The instance with `global = true`, passed whole (`module.<name>`). Required when `global = false`. |
-| `regions` | Every location a scan engine is deployed in, including this one. Global instance only. |
+| `regions` | Every location a scan engine is deployed in, including this one, as codes or display names, each location once. FortiDSPM receives the codes. Global instance only. |
 | `lacework_integration_name` | Name of the FortiCNAPP DSPM integration. Global instance only. Default `azure-fortidspm`. |
 | `tenant_id` | Azure tenant the scan engines belong to. Empty = tenant of the current credentials. Global instance only. |
 | `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials. Global instance only. |

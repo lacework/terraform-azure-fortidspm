@@ -10,6 +10,12 @@
 # azuread is listed because graph_roles.tf grants the scan engine's managed
 # identity Microsoft Graph app roles.
 locals {
+  # location and regions accept the Azure display name ("Central US") or the code
+  # (centralus). FortiDSPM, the activation token / image URL keys and resource names
+  # all use the code.
+  location = lower(replace(var.location, " ", ""))
+  regions  = [for r in var.regions : lower(replace(r, " ", ""))]
+
   integration = var.global ? {
     lacework_integration_guid = lacework_integration_azure_fortidspm.main[0].intg_guid
     deployment_id             = lacework_integration_azure_fortidspm.main[0].deployment_id
@@ -91,7 +97,7 @@ data "azapi_resource_list" "vm_skus" {
   type      = "Microsoft.Compute/skus@2021-07-01"
   parent_id = data.azurerm_subscription.current.id
   query_parameters = {
-    "$filter" = ["location eq '${lower(replace(var.location, " ", ""))}'"]
+    "$filter" = ["location eq '${local.location}'"]
   }
   # length(...) == `0`, not !(...): azapi's JMESPath does not treat an empty
   # array as false, so the negation would drop every size.
@@ -116,7 +122,7 @@ data "azapi_resource_list" "vm_skus" {
 # get 0 for the newest families, and Azure only says so when the VM is created.
 data "azapi_resource_list" "vm_usages" {
   type      = "Microsoft.Compute/locations/usages@2023-07-01"
-  parent_id = "${data.azurerm_subscription.current.id}/providers/Microsoft.Compute/locations/${lower(replace(var.location, " ", ""))}"
+  parent_id = "${data.azurerm_subscription.current.id}/providers/Microsoft.Compute/locations/${local.location}"
   response_export_values = {
     usages = "value[].{name: name.value, current: currentValue, limit: limit}"
   }
@@ -550,12 +556,4 @@ resource "lacework_fortidspm_deployment_status" "this" {
     private_ip            = azurerm_network_interface.main.private_ip_address
     identity_principal_id = local.mi_principal_id
   }
-}
-
-# location and regions accept the Azure display name ("Central US") or the code
-# (centralus). FortiDSPM, the activation token / image URL keys and resource names
-# all use the code.
-locals {
-  location = lower(replace(var.location, " ", ""))
-  regions  = [for r in var.regions : lower(replace(r, " ", ""))]
 }

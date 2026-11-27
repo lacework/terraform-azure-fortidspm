@@ -51,13 +51,18 @@ variable "subscription_id" {
 }
 
 variable "regions" {
-  description = "Every Azure location a scan engine is deployed in, including this one, as a code (centralus) or display name (\"Central US\"). Used only by the global instance; FortiDSPM issues one token and image URL per entry."
+  description = "Every Azure location a scan engine is deployed in, including this one, as a code (centralus) or display name (\"Central US\"), each location once. Used only by the global instance; FortiDSPM issues one token and image URL per entry."
   type        = list(string)
   default     = []
 
   validation {
     condition     = alltrue([for r in var.regions : can(regex("^[a-z0-9]+$", lower(replace(r, " ", ""))))])
     error_message = "Each regions entry must be an Azure location code (e.g. centralus) or its display name (e.g. \"Central US\")."
+  }
+
+  validation {
+    condition     = length(distinct([for r in var.regions : lower(replace(r, " ", ""))])) == length(var.regions)
+    error_message = "regions lists these locations more than once: ${join(", ", [for c in distinct([for r in var.regions : lower(replace(r, " ", ""))]) : join(" = ", [for r in var.regions : r if lower(replace(r, " ", "")) == c]) if length([for r in var.regions : r if lower(replace(r, " ", "")) == c]) > 1])}. Each location may appear once, as its code (westus2) or its display name (\"West US 2\")."
   }
 }
 

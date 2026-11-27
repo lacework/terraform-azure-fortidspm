@@ -85,7 +85,7 @@ copied blob ignores later changes to it.
 | `location` | Azure location this instance deploys into, as a code (`centralus`) or display name (`"Central US"`). |
 | `global` | Create the FortiCNAPP DSPM integration in this instance. Exactly one instance per deployment. Default `false`. |
 | `global_module_reference` | The instance with `global = true`, passed whole (`module.<name>`). Required when `global = false`. |
-| `regions` | Every location a scan engine is deployed in, including this one, as codes or display names (mixing is fine). FortiDSPM receives the codes. Global instance only. |
+| `regions` | Every location a scan engine is deployed in, including this one, as codes or display names, each location once. FortiDSPM receives the codes. Global instance only. |
 | `lacework_integration_name` | Name of the FortiCNAPP DSPM integration. Global instance only. Default `azure-fortidspm`. |
 | `tenant_id` | Azure tenant the scan engines belong to. Empty = tenant of the current credentials. Global instance only. |
 | `subscription_id` | Subscription the scan engines are deployed in. Empty = subscription of the current credentials. Global instance only. |
